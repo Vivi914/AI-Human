@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>互動式矩陣分析工具 (桌面優化版)</title>
+    <title>互動式矩陣分析工具 (全卡片完整擷取版)</title>
+    <!-- 引入網頁轉圖片核心套件 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -30,8 +32,11 @@
             font-size: 20px;
             color: #1e3a8a;
         }
+        .header-buttons {
+            display: flex;
+            gap: 10px;
+        }
         
-        /* 改為上下架構的容器 */
         .main-container {
             display: flex;
             flex-direction: column;
@@ -40,12 +45,34 @@
             min-height: 0;
         }
 
-        /* 1. 上方矩陣區域：調大佔比，給予充足的放置空間 */
+        /* 圖片擷取目標區域的外框 */
+        .capture-container {
+            flex: 1.3;
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            min-height: 0;
+        }
+        .capture-title {
+            display: none; /* 平時隱藏，只有產出圖片時會顯示在圖片頂部 */
+            font-size: 22px;
+            font-weight: bold;
+            color: #1e3a8a;
+            text-align: center;
+            margin-bottom: 15px;
+            border-bottom: 3px double #1e3a8a;
+            padding-bottom: 10px;
+        }
+
+        /* 2x2 矩陣區域 */
         .matrix-wrapper {
-            flex: 1.2; 
+            flex: 1; 
             display: grid;
             grid-template-columns: 80px 1fr 1fr;
-            grid-template-rows: 40px 1fr 1fr;
+            grid-template-rows: 40px 1fr 1fr; /* 網頁畫面上固定比例 */
             background-color: #ffffff;
             border: 4px solid #1e3a8a;
             border-radius: 8px;
@@ -62,12 +89,13 @@
         }
         .col-header-1 { grid-column: 2; grid-row: 1; border-bottom: 2px solid #1e3a8a; border-right: 2px solid #1e3a8a; }
         .col-header-2 { grid-column: 3; grid-row: 1; border-bottom: 2px solid #1e3a8a; }
-        .row-header-1 { grid-column: 1; grid-row: 2; border-right: 2px solid #1e3a8a; border-bottom: 2px solid #1e3a8a; display: flex; flex-direction: column; }
-        .row-header-2 { grid-column: 1; grid-row: 3; border-right: 2px solid #1e3a8a; display: flex; flex-direction: column; }
+        
+        .row-header-1 { grid-column: 1; grid-row: 2; border-right: 2px solid #1e3a8a; border-bottom: 2px solid #1e3a8a; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .row-header-2 { grid-column: 1; grid-row: 3; border-right: 2px solid #1e3a8a; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         
         .quadrant {
             padding: 12px;
-            overflow-y: auto;
+            overflow-y: auto; /* 網頁畫面上超出時允許滾動 */
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
@@ -83,9 +111,9 @@
         .q3 { grid-column: 2; grid-row: 3; border-right: 2px solid #1e3a8a; }
         .q4 { grid-column: 3; grid-row: 3; }
 
-        /* 2. 下方字卡暫存庫：改為寬廣的橫向平鋪桌面 */
+        /* 下方橫向平鋪桌面 */
         .repository-wrapper {
-            flex: 0.8; 
+            flex: 0.7; 
             display: flex;
             flex-direction: column;
             background-color: #ffffff;
@@ -106,8 +134,6 @@
             align-items: center;
             flex-shrink: 0;
         }
-        
-        /* 核心改動：改為橫向自動換行 (Row Wrap) 的網格分佈 */
         .repository {
             flex: 1;
             overflow-y: auto;
@@ -118,12 +144,12 @@
             align-content: flex-start;
         }
         
-        /* 字卡寬度微調，使其在橫向排列時更美觀不佔空間 */
+        /* 字卡基本樣式 */
         .card {
             background-color: #ffffff;
             border: 2px solid #1e3a8a;
             border-radius: 10px;
-            width: 230px; /* 固定寬度，防擠壓 */
+            width: 230px; 
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             cursor: grab;
             user-select: none;
@@ -132,12 +158,8 @@
             overflow: hidden;
             flex-shrink: 0;
         }
-        .card:active {
-            cursor: grabbing;
-        }
-        .card.dragging {
-            opacity: 0.4;
-        }
+        .card:active { cursor: grabbing; }
+        .card.dragging { opacity: 0.4; }
         .card-top {
             display: flex;
             align-items: stretch;
@@ -175,8 +197,7 @@
             background-color: #f8fafc;
         }
         .card-arrow {
-            width: 0;
-            height: 0;
+            width: 0; height: 0;
             border-left: 5px solid transparent;
             border-right: 5px solid transparent;
             border-top: 5px solid #94a3b8;
@@ -192,9 +213,7 @@
             padding: 0 10px;
             line-height: 1.4;
         }
-        .card.expanded .card-arrow {
-            transform: rotate(180deg);
-        }
+        .card.expanded .card-arrow { transform: rotate(180deg); }
         .card.expanded .card-definition {
             max-height: 150px;
             padding: 6px 10px 10px 10px;
@@ -202,7 +221,7 @@
             overflow-y: auto;
         }
         
-        /* C19 灰底標示 */
+        /* C19 灰底特殊樣式 */
         .card[data-id="C19"] {
             background-color: #f1f5f9;
             border-color: #64748b;
@@ -219,50 +238,126 @@
             border-radius: 12px;
             color: #475569;
         }
-        .btn-reset {
-            background-color: #ef4444;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
+        
+        /* 按鈕樣式 */
+        button {
+            padding: 8px 14px;
+            border-radius: 5px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 13px;
+            border: none;
         }
-        .btn-reset:hover {
-            background-color: #dc2626;
+        .btn-reset { background-color: #ef4444; color: white; }
+        .btn-reset:hover { background-color: #dc2626; }
+        
+        .btn-export { background-color: #10b981; color: white; }
+        .btn-export:hover { background-color: #059669; }
+
+        /* 彈出相簿視窗 (Modal) 樣式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
         }
+        .modal-box {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            width: 750px;
+            max-width: 95%;
+            max-height: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .modal-box h3 { margin: 0; color: #1e3a8a; text-align: center; }
+        
+        .image-preview-container {
+            flex: 1;
+            overflow-y: auto;
+            border: 2px dashed #cbd5e1;
+            border-radius: 6px;
+            display: flex;
+            justify-content: center;
+            background-color: #f8fafc;
+            padding: 10px;
+        }
+        .image-preview-container img {
+            max-width: 100%;
+            height: auto;
+            object-fit: contain;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        .btn-download { background-color: #2563eb; color: white; }
+        .btn-download:hover { background-color: #1d4ed8; }
+        .btn-close { background-color: #64748b; color: white; }
+        .btn-close:hover { background-color: #475569; }
     </style>
 </head>
 <body>
 
     <header>
-        <h1>人類 & AI 互動質性分析矩陣工具 (橫向平鋪優化版)</h1>
-        <button class="btn-reset" onclick="resetMatrix()">全部重置</button>
+        <h1>人類 & AI 互動質性分析矩陣工具</h1>
+        <div class="header-buttons">
+            <button class="btn-export" onclick="generateMatrixImage()">📸 產生分析圖片 (傳送用)</button>
+            <button class="btn-reset" onclick="resetMatrix()">全部重置</button>
+        </div>
     </header>
 
     <div class="main-container">
-        <!-- 上方：2x2 矩陣 -->
-        <div class="matrix-wrapper">
-            <div class="matrix-header col-header-1">AI 內</div>
-            <div class="matrix-header col-header-2">AI 外</div>
-            <div class="matrix-header row-header-1"><span>Human</span><span>內</span></div>
-            <div class="matrix-header row-header-2"><span>Human</span><span>外</span></div>
+        <!-- 上方：2x2 矩陣外包裝 -->
+        <div class="capture-container" id="captureZone">
+            <div class="capture-title" id="captureTitle">人類 & AI 互動質性分析矩陣結果</div>
+            <div class="matrix-wrapper">
+                <div class="matrix-header col-header-1">AI 內</div>
+                <div class="matrix-header col-header-2">AI 外</div>
+                <div class="matrix-header row-header-1"><span>Human</span><span>內</span></div>
+                <div class="matrix-header row-header-2"><span>Human</span><span>外</span></div>
 
-            <div class="quadrant q1" id="quadrant-AI-in-Human-in" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
-            <div class="quadrant q2" id="quadrant-AI-out-Human-in" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
-            <div class="quadrant q3" id="quadrant-AI-in-Human-out" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
-            <div class="quadrant q4" id="quadrant-AI-out-Human-out" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+                <div class="quadrant q1" id="quadrant-AI-in-Human-in" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+                <div class="quadrant q2" id="quadrant-AI-out-Human-in" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+                <div class="quadrant q3" id="quadrant-AI-in-Human-out" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+                <div class="quadrant q4" id="quadrant-AI-out-Human-out" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+            </div>
         </div>
 
         <!-- 下方：平鋪的待分類字卡庫 -->
         <div class="repository-wrapper">
             <div class="repository-title">
-                <span>待分類字卡桌面（支援橫向多排平鋪，滾動檢視不遮擋）</span>
+                <span>待分類字卡桌面（支援橫向多排平鋪）</span>
                 <span class="counter" id="repo-counter">25張</span>
             </div>
             <div class="repository" id="cards-repository" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
-                <!-- JavaScript 將在此動態注入 25 張字卡 -->
+                <!-- 字卡由 JS 自動載入 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 圖片匯出預覽彈出視窗 -->
+    <div class="modal-overlay" id="imageModal">
+        <div class="modal-box">
+            <h3>🎉 矩陣分析圖片已生成</h3>
+            <p style="margin:0; font-size:13px; color:#475569; text-align: center;">
+                電腦用戶：點擊下方按鈕下載圖片。 <br>
+                手機/平板：可直接<b>長按下方圖片</b>選擇「儲存圖片」或「複製」，即可直接貼進 LINE 或 Mail！
+            </p>
+            <div class="image-preview-container">
+                <img id="previewImg" src="" alt="矩陣結果預覽">
+            </div>
+            <div class="modal-footer">
+                <button class="btn-download" onclick="downloadImage()">💾 下載圖片檔案</button>
+                <button class="btn-close" onclick="closeModal()">關閉視窗</button>
             </div>
         </div>
     </div>
@@ -278,7 +373,7 @@
             {"id": "C7", "category": "把 AI 當朋友", "definition": "使用者雖然在本體論上明知 AI 是機器，但在高壓、孤立或迷茫的互動中，自發對其產生心理情感投射、擬人化為傾聽對象，甚至將其視為內在既存聲音之放大的現象。"},
             {"id": "C8", "category": "跟 AI 聊天很有安全感", "definition": "使用者在面對非人類的 AI 介面時，因不具備真實人際評判與社會壓力，進而體驗到低防備、輕鬆且降低問話焦慮的心理安全感。"},
             {"id": "C9", "category": "AI 幫忙整理資料", "definition": "使用者利用 AI 的高階跨來源數據整合、多模態圖像識別、文字修飾與代碼快寫生成能力，將其當作系統化外部中介，用以壓縮傳統資訊搜尋、語氣重塑與常規流程編寫的時間，以極大化提升實務效能。"},
-            {"id": "C10", "category": "AI 幫助快速上手", "definition": "使用者在本身缺乏美學設計、音樂創作、高階排版或複雜程式的操作技術限制下，利用 AI 作為「心智技術假肢」代勞，以暴力破除漫長技術累積門檻並將概念實體化的現象。"},
+            {"id": "C10", "category": "AI 幫助快速上手", "definition": "使用者在本身缺乏美學設計、音樂創作、高階排版或複雜程式的操作技術限制下，利用 AI 作s為「心智技術假肢」代勞，以暴力破除漫長技術累積門檻並將概念實體化的現象。"},
             {"id": "C11", "category": "真人經驗比較可靠", "definition": "面對具備雙向即時中斷澄清需求、涉及複雜組織政治脈絡、權力依賴（如指導教授），或高度涉及無法開源之現場實務操作（如打光、軟硬體整合）時，個體自發、優先撤退回真實人際場域尋求真人協助的信任偏好。"},
             {"id": "C12", "category": "AI 不一定會答對", "definition": "工具受限於其底層演算法隨機不確定性（如幻覺）、多模態單向輸出不具備即時中斷性、前後文字數量上限限，所展現出內容完備度不足或缺乏實務可行性的技術本質邊界。"},
             {"id": "C13", "category": "AI 不好用就不用了", "definition": "在人機對話陷入邏輯鬼打牆，或使用者因無法產出具體可執行的微調指令、評估人機磨合之時間成本過高時，主動採取重新開啟對話框、同時使用多工具比對或直接中斷對話、退回人工手動處理的斷裂現象。"},
@@ -295,6 +390,8 @@
             {"id": "C24", "category": "把事情交給 AI 做", "definition": "使用者理性評估某些重複、機械性高的非核心繁瑣工作（如規格比對、外包校對）應交給 AI 以剝離個人精力的管理決策。"},
             {"id": "C25", "category": "特殊案例（獨立分類）", "definition": "屬於高度特定的任務或高階抽象之形上學哲學思辨，為防過度整併導致質性研究在地獨特厚度被平庸化抹平，依據學術規範不強制製作切面黏合，維持獨立描述。"}
         ];
+
+        let currentImgData = "";
 
         function createCard(data) {
             const card = document.createElement('div');
@@ -318,29 +415,23 @@
                 card.classList.add('dragging');
                 e.dataTransfer.setData('text/plain', card.id);
             });
-            
             card.addEventListener('dragend', () => {
                 card.classList.remove('dragging');
                 updateCounters();
             });
-            
             return card;
         }
 
         function initRepository() {
             const repo = document.getElementById('cards-repository');
             repo.innerHTML = '';
-            cardsData.forEach(data => {
-                repo.appendChild(createCard(data));
-            });
+            cardsData.forEach(data => { repo.appendChild(createCard(data)); });
             updateCounters();
         }
 
         function toggleExpand(id) {
             const card = document.getElementById(id);
-            if (card) {
-                card.classList.toggle('expanded');
-            }
+            if (card) card.classList.toggle('expanded');
         }
 
         function allowDrop(e) {
@@ -350,10 +441,7 @@
                 container.classList.add('drag-over');
             }
         }
-
-        function dragLeave(e) {
-            e.currentTarget.classList.remove('drag-over');
-        }
+        function dragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
 
         function drop(e) {
             e.preventDefault();
@@ -379,6 +467,106 @@
                 initRepository();
                 document.querySelectorAll('.quadrant').forEach(q => q.innerHTML = '');
             }
+        }
+
+        /* 📸 【關鍵修正點】現場即時撐開、截圖後秒還原 */
+        function generateMatrixImage() {
+            const target = document.getElementById('captureZone');
+            const title = document.getElementById('captureTitle');
+            const wrapper = target.querySelector('.matrix-wrapper');
+            const quadrants = target.querySelectorAll('.quadrant');
+            
+            // 1. 完整備份網頁當前的所有原始樣式
+            const origBodyOverflow = document.body.style.overflow;
+            const origBodyHeight = document.body.style.height;
+            const origTargetHeight = target.style.height;
+            const origTargetMaxHeight = target.style.maxHeight;
+            const origWrapperHeight = wrapper.style.height;
+            const origWrapperGrid = wrapper.style.gridTemplateRows;
+            
+            const origQuadrantsStyles = [];
+            quadrants.forEach(q => {
+                origQuadrantsStyles.push({
+                    el: q,
+                    overflow: q.style.overflow,
+                    height: q.style.height,
+                    maxHeight: q.style.maxHeight
+                });
+            });
+
+            // 2. 瞬間「實體解鎖」所有高度藩籬，讓卡片把矩陣全量撐開
+            title.style.display = 'block';
+            document.body.style.overflow = 'visible';
+            document.body.style.height = 'auto';
+            target.style.height = 'auto';
+            target.style.maxHeight = 'none';
+            wrapper.style.height = 'auto';
+            wrapper.style.gridTemplateRows = '40px auto auto'; // 解除 1fr 1fr，改為依內容自動撐高
+            
+            quadrants.forEach(q => {
+                q.style.overflow = 'visible';
+                q.style.height = 'auto';
+                q.style.maxHeight = 'none';
+            });
+
+            // 3. 這時候執行 html2canvas 就能量到「100% 完整的實體總高度」
+            html2canvas(target, {
+                scale: 2, // 高清渲染
+                backgroundColor: "#ffffff",
+                logging: false,
+                useCORS: true
+            }).then(canvas => {
+                // 4. 截圖完了！立刻無縫還原現場樣式，使用者完全不留痕跡
+                title.style.display = 'none';
+                document.body.style.overflow = origBodyOverflow;
+                document.body.style.height = origBodyHeight;
+                target.style.height = origTargetHeight;
+                target.style.maxHeight = origTargetMaxHeight;
+                wrapper.style.height = origWrapperHeight;
+                wrapper.style.gridTemplateRows = origWrapperGrid;
+                
+                origQuadrantsStyles.forEach(item => {
+                    item.el.style.overflow = item.overflow;
+                    item.el.style.height = item.height;
+                    item.el.style.maxHeight = item.maxHeight;
+                });
+
+                // 塞入預覽視窗
+                currentImgData = canvas.toDataURL('image/png');
+                document.getElementById('previewImg').src = currentImgData;
+                document.getElementById('imageModal').style.display = 'flex';
+            }).catch(err => {
+                // 萬一出錯也要確實還原樣式
+                title.style.display = 'none';
+                document.body.style.overflow = origBodyOverflow;
+                document.body.style.height = origBodyHeight;
+                target.style.height = origTargetHeight;
+                target.style.maxHeight = origTargetMaxHeight;
+                wrapper.style.height = origWrapperHeight;
+                wrapper.style.gridTemplateRows = origWrapperGrid;
+                origQuadrantsStyles.forEach(item => {
+                    item.el.style.overflow = item.overflow;
+                    item.el.style.height = item.height;
+                    item.el.style.maxHeight = item.maxHeight;
+                });
+                
+                alert('圖片生成失敗，請重試！');
+                console.error(err);
+            });
+        }
+
+        function closeModal() {
+            document.getElementById('imageModal').style.display = 'none';
+        }
+
+        function downloadImage() {
+            if (!currentImgData) return;
+            const a = document.createElement('a');
+            a.href = currentImgData;
+            a.download = '人類_AI_互動質性分析矩陣結果.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         }
 
         window.onload = initRepository;
