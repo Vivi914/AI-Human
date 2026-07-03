@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動式矩陣分析工具 (桌面優化版)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 15px;
+            background-color: #f1f5f9;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        header {
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        h1 {
+            margin: 0;
+            font-size: 20px;
+            color: #1e3a8a;
+        }
+        
+        /* 改為上下架構的容器 */
+        .main-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            gap: 15px;
+            min-height: 0;
+        }
+
+        /* 1. 上方矩陣區域：調大佔比，給予充足的放置空間 */
+        .matrix-wrapper {
+            flex: 1.2; 
+            display: grid;
+            grid-template-columns: 80px 1fr 1fr;
+            grid-template-rows: 40px 1fr 1fr;
+            background-color: #ffffff;
+            border: 4px solid #1e3a8a;
+            border-radius: 8px;
+            min-height: 0;
+        }
+        .matrix-header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 16px;
+            color: #1e3a8a;
+            background-color: #f8fafc;
+        }
+        .col-header-1 { grid-column: 2; grid-row: 1; border-bottom: 2px solid #1e3a8a; border-right: 2px solid #1e3a8a; }
+        .col-header-2 { grid-column: 3; grid-row: 1; border-bottom: 2px solid #1e3a8a; }
+        .row-header-1 { grid-column: 1; grid-row: 2; border-right: 2px solid #1e3a8a; border-bottom: 2px solid #1e3a8a; display: flex; flex-direction: column; }
+        .row-header-2 { grid-column: 1; grid-row: 3; border-right: 2px solid #1e3a8a; display: flex; flex-direction: column; }
+        
+        .quadrant {
+            padding: 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-content: flex-start;
+            background-color: #ffffff;
+            transition: background-color 0.2s;
+        }
+        .quadrant.drag-over {
+            background-color: #eff6ff;
+        }
+        .q1 { grid-column: 2; grid-row: 2; border-right: 2px solid #1e3a8a; border-bottom: 2px solid #1e3a8a; }
+        .q2 { grid-column: 3; grid-row: 2; border-bottom: 2px solid #1e3a8a; }
+        .q3 { grid-column: 2; grid-row: 3; border-right: 2px solid #1e3a8a; }
+        .q4 { grid-column: 3; grid-row: 3; }
+
+        /* 2. 下方字卡暫存庫：改為寬廣的橫向平鋪桌面 */
+        .repository-wrapper {
+            flex: 0.8; 
+            display: flex;
+            flex-direction: column;
+            background-color: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 12px;
+            min-height: 0;
+        }
+        .repository-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #334155;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        
+        /* 核心改動：改為橫向自動換行 (Row Wrap) 的網格分佈 */
+        .repository {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-wrap: wrap; 
+            gap: 10px;
+            padding: 5px;
+            align-content: flex-start;
+        }
+        
+        /* 字卡寬度微調，使其在橫向排列時更美觀不佔空間 */
+        .card {
+            background-color: #ffffff;
+            border: 2px solid #1e3a8a;
+            border-radius: 10px;
+            width: 230px; /* 固定寬度，防擠壓 */
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            cursor: grab;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .card:active {
+            cursor: grabbing;
+        }
+        .card.dragging {
+            opacity: 0.4;
+        }
+        .card-top {
+            display: flex;
+            align-items: stretch;
+            padding: 6px 10px;
+            min-height: 40px;
+        }
+        .card-id {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1e3a8a;
+            padding-right: 8px;
+            border-right: 2px solid #1e3a8a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 42px;
+        }
+        .card-category {
+            font-size: 13px;
+            font-weight: bold;
+            color: #1e293b;
+            padding-left: 8px;
+            display: flex;
+            align-items: center;
+            flex: 1;
+            line-height: 1.3;
+        }
+        .card-divider {
+            border-top: 1.5px solid #94a3b8;
+            position: relative;
+            cursor: pointer;
+            padding: 3px 0;
+            display: flex;
+            justify-content: center;
+            background-color: #f8fafc;
+        }
+        .card-arrow {
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #94a3b8;
+            transition: transform 0.2s;
+        }
+        .card-definition {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out;
+            font-size: 12px;
+            color: #475569;
+            background-color: #f8fafc;
+            padding: 0 10px;
+            line-height: 1.4;
+        }
+        .card.expanded .card-arrow {
+            transform: rotate(180deg);
+        }
+        .card.expanded .card-definition {
+            max-height: 150px;
+            padding: 6px 10px 10px 10px;
+            border-top: 1px dashed #e2e8f0;
+            overflow-y: auto;
+        }
+        
+        /* C19 灰底標示 */
+        .card[data-id="C19"] {
+            background-color: #f1f5f9;
+            border-color: #64748b;
+        }
+        .card[data-id="C19"] .card-id {
+            color: #64748b;
+            border-color: #64748b;
+        }
+
+        .counter {
+            font-size: 12px;
+            background-color: #e2e8f0;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: #475569;
+        }
+        .btn-reset {
+            background-color: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .btn-reset:hover {
+            background-color: #dc2626;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>人類 & AI 互動質性分析矩陣工具 (橫向平鋪優化版)</h1>
+        <button class="btn-reset" onclick="resetMatrix()">全部重置</button>
+    </header>
+
+    <div class="main-container">
+        <!-- 上方：2x2 矩陣 -->
+        <div class="matrix-wrapper">
+            <div class="matrix-header col-header-1">AI 內</div>
+            <div class="matrix-header col-header-2">AI 外</div>
+            <div class="matrix-header row-header-1"><span>Human</span><span>內</span></div>
+            <div class="matrix-header row-header-2"><span>Human</span><span>外</span></div>
+
+            <div class="quadrant q1" id="quadrant-AI-in-Human-in" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+            <div class="quadrant q2" id="quadrant-AI-out-Human-in" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+            <div class="quadrant q3" id="quadrant-AI-in-Human-out" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+            <div class="quadrant q4" id="quadrant-AI-out-Human-out" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)"></div>
+        </div>
+
+        <!-- 下方：平鋪的待分類字卡庫 -->
+        <div class="repository-wrapper">
+            <div class="repository-title">
+                <span>待分類字卡桌面（支援橫向多排平鋪，滾動檢視不遮擋）</span>
+                <span class="counter" id="repo-counter">25張</span>
+            </div>
+            <div class="repository" id="cards-repository" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
+                <!-- JavaScript 將在此動態注入 25 張字卡 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const cardsData = [
+            {"id": "C1", "category": "AI 會自己改錯", "definition": "使用者在發現 AI 生成的文字、代碼、簡報、影片或圖像出現錯誤、失控或不符預期時，透過明確指錯、迭代澄清、條件疊加、局部微調或人工介入調校，以尋求精準結果的修正行為。"},
+            {"id": "C2", "category": "AI 會查資料、會反問", "definition": "使用者對 AI 產出的內容保持批判、保留或不盲從態度，主動採取多模型交叉比對、追問評估理由、對照自身已知答案/專業知識，或訴諸醫學/專家實境現場驗證，以確認資訊真實性的避險行為。"},
+            {"id": "C3", "category": "AI 會記得之前聊天", "definition": "使用者依賴或主動管理 AI 保留歷史對話、提示詞與上下文記憶的特性，用以翻閱低頻指令、維持延續經驗，或透過清理維護與重新開視窗以防範舊脈絡干擾的控制行為。"},
+            {"id": "C4", "category": "AI 的角色和回答方式", "definition": "使用者透過框架角色設定、框定情境或明確讀者立場，或要求 AI 進行「反向引導提問」等多元修改策略，以優化對話範圍或操縱機器輸出質量的提問手段。"},
+            {"id": "C5", "category": "擔心 AI 讓人變懶得思考", "definition": "使用者在使用 AI 時，因高度隨即回答的便利而產生「框架效應（失去想像力）」、「思考過程缺失」與「細節記不住」等心理層面的認知退化焦慮。"},
+            {"id": "C6", "category": "用 AI 學但不懂原因", "definition": "使用者因將記憶與檢索交給外部 AI 代理，進而減少了傳統大腦筆記、刻意記憶與文獻深層消化的行為模式轉變。"},
+            {"id": "C7", "category": "把 AI 當朋友", "definition": "使用者雖然在本體論上明知 AI 是機器，但在高壓、孤立或迷茫的互動中，自發對其產生心理情感投射、擬人化為傾聽對象，甚至將其視為內在既存聲音之放大的現象。"},
+            {"id": "C8", "category": "跟 AI 聊天很有安全感", "definition": "使用者在面對非人類的 AI 介面時，因不具備真實人際評判與社會壓力，進而體驗到低防備、輕鬆且降低問話焦慮的心理安全感。"},
+            {"id": "C9", "category": "AI 幫忙整理資料", "definition": "使用者利用 AI 的高階跨來源數據整合、多模態圖像識別、文字修飾與代碼快寫生成能力，將其當作系統化外部中介，用以壓縮傳統資訊搜尋、語氣重塑與常規流程編寫的時間，以極大化提升實務效能。"},
+            {"id": "C10", "category": "AI 幫助快速上手", "definition": "使用者在本身缺乏美學設計、音樂創作、高階排版或複雜程式的操作技術限制下，利用 AI 作為「心智技術假肢」代勞，以暴力破除漫長技術累積門檻並將概念實體化的現象。"},
+            {"id": "C11", "category": "真人經驗比較可靠", "definition": "面對具備雙向即時中斷澄清需求、涉及複雜組織政治脈絡、權力依賴（如指導教授），或高度涉及無法開源之現場實務操作（如打光、軟硬體整合）時，個體自發、優先撤退回真實人際場域尋求真人協助的信任偏好。"},
+            {"id": "C12", "category": "AI 不一定會答對", "definition": "工具受限於其底層演算法隨機不確定性（如幻覺）、多模態單向輸出不具備即時中斷性、前後文字數量上限限，所展現出內容完備度不足或缺乏實務可行性的技術本質邊界。"},
+            {"id": "C13", "category": "AI 不好用就不用了", "definition": "在人機對話陷入邏輯鬼打牆，或使用者因無法產出具體可執行的微調指令、評估人機磨合之時間成本過高時，主動採取重新開啟對話框、同時使用多工具比對或直接中斷對話、退回人工手動處理的斷裂現象。"},
+            {"id": "C14", "category": "多種資訊來源一起用", "definition": "使用者內部建立的雙軌資料獲取流向：依據任務屬性（如生活日常常識、或需要嚴格追溯出處之客觀事實偽裁決），進行傳統網頁逐鍵檢索與 AI 自動生成之間的權重分配習慣。"},
+            {"id": "C15", "category": "不同 AI 各做不同事", "definition": "使用者根據資料安全權限、組織採購政策、付費身分或特定多模態任務（學術寫作、生圖、程式編寫），在多個不同 LLM 模型或特定功能模式間進行理性配置與切換的行為。"},
+            {"id": "C16", "category": "哪個 AI 好用就換哪個", "definition": "使用者在面對 AI 工具輸出持續低劣、直接拒絕、或功能缺失時，展現出高度實用主義的低技術忠誠度，立即採取快速淘汰並更換工具的決策行為。"},
+            {"id": "C17", "category": "自己還是要判斷", "definition": "使用者在對話中刻意將工具限縮為「既有認知的校對鏡像」或「反向指標」，透過先行將想法具象化再輸入、堅持掌握底層運作邏輯，以捍衛自主裁判權的心智歷程。"},
+            {"id": "C18", "category": "AI 用在哪些事情", "definition": "受訪者對於自身操作 AI 工具之總體時間長度、常態觸發時機、工作日頻率配比，以及大類用途進行客觀描述的背景資訊欄位。"},
+            {"id": "C19", "category": "公司或主管不支持 AI", "definition": "受訪者在組織科層環境中，因不同年齡、管理權力階層對 AI 的認知差異與傳統工作流價值觀的持守，進而引發遭遇負面指責、排斥 AI 生成內容，或因主管不耐煩而反向轉導機器的科層權力制約現象。"},
+            {"id": "C20", "category": "人和 AI 一起合作思考", "definition": "擁有特定領域專長知識底蘊（如美感、設計基礎）的使用者，與 AI 的隨機發散產出進行雙向引導與高頻碰撞，並將互動視為反向精煉、累積自身核心能力的共生歷程。"},
+            {"id": "C21", "category": "一個人做很多工作", "definition": "由於 AI 瞬間壓縮並接管了程式編寫等邊緣技術與寫作成本，促使人類個體的精力發生結構性移轉，得以透過全事務業務外包，實現全流程個人獨立營運的超級個體商業模式。"},
+            {"id": "C22", "category": "不喜歡用 AI", "definition": "使用者因工具操作介面或流程缺乏直覺化感受，或主觀評估其僅為過渡暫時性科技，進而不願投入學習磨合成本、直接拒絕接觸或排斥將其納入既有流程的抗拒現象。"},
+            {"id": "C23", "category": "太相信 AI", "definition": "使用者完全將工具作為核心裁決主體，在工作時展現出無條件接受、跳過專業審查，使大腦主體判斷權利慢性被演算法吞噬的依賴現象。"},
+            {"id": "C24", "category": "把事情交給 AI 做", "definition": "使用者理性評估某些重複、機械性高的非核心繁瑣工作（如規格比對、外包校對）應交給 AI 以剝離個人精力的管理決策。"},
+            {"id": "C25", "category": "特殊案例（獨立分類）", "definition": "屬於高度特定的任務或高階抽象之形上學哲學思辨，為防過度整併導致質性研究在地獨特厚度被平庸化抹平，依據學術規範不強制製作切面黏合，維持獨立描述。"}
+        ];
+
+        function createCard(data) {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.id = data.id;
+            card.setAttribute('data-id', data.id);
+            card.setAttribute('draggable', 'true');
+            
+            card.innerHTML = `
+                <div class="card-top">
+                    <div class="card-id">${data.id}</div>
+                    <div class="card-category">${data.category}</div>
+                </div>
+                <div class="card-divider" onclick="toggleExpand('${data.id}')">
+                    <div class="card-arrow"></div>
+                </div>
+                <div class="card-definition">${data.definition}</div>
+            `;
+            
+            card.addEventListener('dragstart', (e) => {
+                card.classList.add('dragging');
+                e.dataTransfer.setData('text/plain', card.id);
+            });
+            
+            card.addEventListener('dragend', () => {
+                card.classList.remove('dragging');
+                updateCounters();
+            });
+            
+            return card;
+        }
+
+        function initRepository() {
+            const repo = document.getElementById('cards-repository');
+            repo.innerHTML = '';
+            cardsData.forEach(data => {
+                repo.appendChild(createCard(data));
+            });
+            updateCounters();
+        }
+
+        function toggleExpand(id) {
+            const card = document.getElementById(id);
+            if (card) {
+                card.classList.toggle('expanded');
+            }
+        }
+
+        function allowDrop(e) {
+            e.preventDefault();
+            const container = e.currentTarget;
+            if (container.classList.contains('quadrant') || container.id === 'cards-repository') {
+                container.classList.add('drag-over');
+            }
+        }
+
+        function dragLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function drop(e) {
+            e.preventDefault();
+            const container = e.currentTarget;
+            container.classList.remove('drag-over');
+            
+            const cardId = e.dataTransfer.getData('text/plain');
+            const card = document.getElementById(cardId);
+            
+            if (card && (container.classList.contains('quadrant') || container.id === 'cards-repository')) {
+                container.appendChild(card);
+                updateCounters();
+            }
+        }
+
+        function updateCounters() {
+            const repoCount = document.getElementById('cards-repository').children.length;
+            document.getElementById('repo-counter').innerText = `${repoCount}張`;
+        }
+
+        function resetMatrix() {
+            if (confirm('確定要將所有字卡重置回下方待分類庫嗎？')) {
+                initRepository();
+                document.querySelectorAll('.quadrant').forEach(q => q.innerHTML = '');
+            }
+        }
+
+        window.onload = initRepository;
+    </script>
+</body>
+</html>
